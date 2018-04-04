@@ -27,6 +27,14 @@
                     android:layout_height="60dp"
                     android:layout_gravity="center_vertical"
                     android:layout_marginRight="5dp"
+                    android:src="@android:drawable/ic_media_play"
+                    android:visibility="gone" />
+                <ImageButton
+                    android:id="@+id/btn_streaming_notification_pause"
+                    android:layout_width="60dp"
+                    android:layout_height="60dp"
+                    android:layout_gravity="center_vertical"
+                    android:layout_marginRight="5dp"
                     android:src="@android:drawable/ic_media_play" />
                 <ImageButton
                     android:id="@+id/btn_streaming_notification_stop"
@@ -36,6 +44,15 @@
                     android:layout_gravity="center_vertical"
                     android:layout_marginRight="10dp"
                     android:src="@android:drawable/ic_menu_close_clear_cancel" />
+                <TextView
+                    android:id="@+id/player_status_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="left|center_vertical"
+                    android:textAlignment="gravity"
+                    android:textColor="#fff"
+                    android:visibility="gone"
+                    />
                 <TextView
                     android:id="@+id/song_name_notification"
                     android:layout_width="match_parent"

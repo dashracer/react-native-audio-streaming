@@ -24,6 +24,7 @@ import android.support.v7.app.NotificationCompat;
 import android.support.v4.app.TaskStackBuilder;
 import android.telephony.PhoneStateListener;
 import android.telephony.TelephonyManager;
+import android.view.View;
 import android.widget.RemoteViews;
 
 import com.spoledge.aacdecoder.MultiPlayer;
@@ -41,6 +42,7 @@ public class Signal extends Service implements OnErrorListener,
     private static final int NOTIFY_ME_ID = 696969;
     private Notification.Builder notifyBuilder;
     private NotificationManager notifyManager = null;
+    private Notification foregroundNotification;
     public static RemoteViews remoteViews;
     private MultiPlayer aacPlayer;
 
@@ -49,7 +51,8 @@ public class Signal extends Service implements OnErrorListener,
 
     public static final String BROADCAST_PLAYBACK_STOP = "stop",
             BROADCAST_PLAYBACK_PLAY = "pause",
-            BROADCAST_EXIT = "exit";
+            BROADCAST_EXIT = "exit",
+            BROADCAST_DISMISSED = "dismiss";
 
     private final Handler handler = new Handler();
     private final IBinder binder = new RadioBinder();
@@ -102,6 +105,7 @@ public class Signal extends Service implements OnErrorListener,
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(BROADCAST_PLAYBACK_STOP);
         intentFilter.addAction(BROADCAST_PLAYBACK_PLAY);
+        intentFilter.addAction(BROADCAST_DISMISSED);
         intentFilter.addAction(BROADCAST_EXIT);
         registerReceiver(this.receiver, intentFilter);
 
@@ -137,13 +141,40 @@ public class Signal extends Service implements OnErrorListener,
     }
 
     public void play() {
+        this.playingView();
         if (isConnected()) {
             this.prepare();
+
         } else {
             sendBroadcast(new Intent(Mode.STOPPED));
         }
-
         this.isPlaying = true;
+
+    }
+
+    private void playingView() {
+        if (remoteViews != null && notifyBuilder != null) {
+            remoteViews.setTextViewText(R.id.player_status_text, "Streaming");
+            remoteViews.setViewVisibility(R.id.btn_streaming_notification_play, View.GONE);
+            remoteViews.setViewVisibility(R.id.btn_streaming_notification_pause, View.VISIBLE);
+
+            foregroundNotification = notifyBuilder.build();
+            foregroundNotification.bigContentView = remoteViews;
+            notifyManager.notify(NOTIFY_ME_ID, foregroundNotification);
+        }
+
+    }
+
+    private void pausedView() {
+        if (remoteViews != null && notifyBuilder != null) {
+            remoteViews.setTextViewText(R.id.player_status_text, "Paused");
+            remoteViews.setViewVisibility(R.id.btn_streaming_notification_play, View.VISIBLE);
+            remoteViews.setViewVisibility(R.id.btn_streaming_notification_pause, View.GONE);
+            foregroundNotification = notifyBuilder.build();
+            foregroundNotification.bigContentView = remoteViews;
+            notifyManager.notify(NOTIFY_ME_ID, foregroundNotification);
+        }
+
     }
 
     public void stop() {
@@ -152,6 +183,7 @@ public class Signal extends Service implements OnErrorListener,
         if (this.isPlaying) {
             this.isPlaying = false;
             this.aacPlayer.stop();
+            this.pausedView();
         }
 
         sendBroadcast(new Intent(Mode.STOPPED));
@@ -168,7 +200,6 @@ public class Signal extends Service implements OnErrorListener,
     }
 
     public void showNotification(Boolean persist, String title) {
-        Notification foregroundNotification;
         remoteViews = new RemoteViews(context.getPackageName(), R.layout.streaming_notification_player);
         notifyBuilder = new Notification.Builder(this.context)
                 .setSmallIcon(android.R.drawable.ic_lock_silent_mode_off) // TODO Use app icon instead
@@ -188,8 +219,10 @@ public class Signal extends Service implements OnErrorListener,
 
         notifyBuilder.setContentIntent(resultPendingIntent);
         remoteViews.setOnClickPendingIntent(R.id.btn_streaming_notification_play, makePendingIntent(BROADCAST_PLAYBACK_PLAY));
+        remoteViews.setOnClickPendingIntent(R.id.btn_streaming_notification_pause, makePendingIntent(BROADCAST_PLAYBACK_PLAY));
         remoteViews.setOnClickPendingIntent(R.id.btn_streaming_notification_stop, makePendingIntent(BROADCAST_EXIT));
         remoteViews.setTextViewText(R.id.song_name_notification, title);
+        notifyBuilder.setDeleteIntent(makePendingIntent(BROADCAST_DISMISSED));
         notifyManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
     
         if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -204,6 +237,7 @@ public class Signal extends Service implements OnErrorListener,
             notifyBuilder.setOnlyAlertOnce(true);
             
         }
+        Notification foregroundNotification;
         foregroundNotification = notifyBuilder.build();
         foregroundNotification.bigContentView = remoteViews;
         notifyManager.notify(NOTIFY_ME_ID, foregroundNotification);
@@ -262,7 +296,7 @@ public class Signal extends Service implements OnErrorListener,
         } else {
             sendBroadcast(new Intent(Mode.STARTED));
         }
-
+        this.playingView();
         return Service.START_NOT_STICKY;
     }
 
@@ -276,6 +310,7 @@ public class Signal extends Service implements OnErrorListener,
     public void onCompletion(MediaPlayer mediaPlayer) {
         this.isPlaying = false;
         this.aacPlayer.stop();
+        this.pausedView();
         sendBroadcast(new Intent(Mode.COMPLETED));
     }
 
@@ -305,6 +340,7 @@ public class Signal extends Service implements OnErrorListener,
                 break;
         }
         sendBroadcast(new Intent(Mode.ERROR));
+        this.pausedView();
         return false;
     }
 
@@ -338,6 +374,7 @@ public class Signal extends Service implements OnErrorListener,
         this.isPlaying = false;
         this.isPreparingStarted = false;
         sendBroadcast(new Intent(Mode.ERROR));
+        this.pausedView();
         //  TODO
     }
 
@@ -348,7 +385,7 @@ public class Signal extends Service implements OnErrorListener,
         metaIntent.putExtra("value", value);
         sendBroadcast(metaIntent);
 
-        if (key != null && key.equals("StreamTitle") && !value.isEmpty() && remoteViews != null && value != null) {
+        if (key != null && key.equals("StreamTitle") && !value.trim().isEmpty() && remoteViews != null && value != null) {
             remoteViews.setTextViewText(R.id.song_name_notification, value);
             notifyBuilder.setContent(remoteViews);
             notifyManager.notify(NOTIFY_ME_ID, notifyBuilder.build());
